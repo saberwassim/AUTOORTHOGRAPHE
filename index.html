@@ -1,0 +1,247 @@
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #74ebd5, #ACB6E5);
+    color: #333;
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  /* Styles accueil */
+  #welcome {
+    text-align: center;
+  }
+
+  #welcome button {
+    margin: 10px 15px;
+    padding: 15px 30px;
+    font-size: 20px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+    transition: background-color 0.3s ease;
+  }
+
+  #welcome button#signinBtn {
+    background-color: #4a6cf7;
+    color: white;
+  }
+
+  #welcome button#guestBtn {
+    background-color: #ddd;
+    color: #333;
+  }
+
+  #welcome button#signinBtn:hover {
+    background-color: #3b54c0;
+  }
+
+  #welcome button#guestBtn:hover {
+    background-color: #bbb;
+  }
+
+  /* Styles correction */
+  textarea {
+    width: 600px;
+    height: 150px;
+    padding: 15px;
+    font-size: 16px;
+    border-radius: 10px;
+    border: 2px solid #ddd;
+    resize: vertical;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  }
+
+  button#checkBtn {
+    margin-top: 15px;
+    padding: 12px 25px;
+    font-size: 18px;
+    background-color: #4CAF50;
+    border: none;
+    border-radius: 12px;
+    color: white;
+    cursor: pointer;
+    box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+    transition: background-color 0.3s ease;
+  }
+
+  button#checkBtn:hover {
+    background-color: #45a049;
+  }
+
+  #correctedText {
+    margin-top: 25px;
+    width: 600px;
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    min-height: 140px;
+    white-space: pre-wrap;
+    font-size: 17px;
+    line-height: 1.4;
+    position: relative;
+  }
+
+  .faulty {
+    color: #d8000c;
+    position: relative;
+    padding-right: 20px;
+    cursor: pointer;
+  }
+
+  .faulty::after {
+    content: "✖";
+    color: #d8000c;
+    position: absolute;
+    right: 5px;
+    top: 0;
+    font-weight: bold;
+    font-size: 18px;
+    user-select: none;
+  }
+
+  .message-box {
+    margin-top: 20px;
+    font-weight: bold;
+    font-size: 20px;
+  }
+
+  .message-success {
+    color: #155724;
+    background-color: #d4edda;
+    padding: 10px 20px;
+    border-radius: 10px;
+  }
+
+  .message-error {
+    color: #721c24;
+    background-color: #f8d7da;
+    padding: 10px 20px;
+    border-radius: 10px;
+  }
+</style>
+
+<div id="welcome">
+  <h1>Bienvenue sur AUTOORTHOGRAPHE</h1>
+  <p>Corrigez vos fautes d'orthographe automatiquement.</p>
+  <button id="signinBtn">S'inscrire / Se connecter</button>
+  <button id="guestBtn">Continuer comme invité</button>
+</div>
+
+<div id="app" class="hidden">
+  <textarea id="text" placeholder="Écris ton texte ici..."></textarea>
+  <button id="checkBtn">Corriger le texte</button>
+
+  <div id="correctedText"></div>
+  <div id="message" class="message-box"></div>
+</div>
+
+<audio id="sound-error" src="https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg"></audio>
+<audio id="sound-success" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+
+<script>
+  // Cacher la page d'accueil, montrer l'app quand on clique sur un bouton
+  document.getElementById('signinBtn').addEventListener('click', () => {
+    document.getElementById('welcome').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+  });
+
+  document.getElementById('guestBtn').addEventListener('click', () => {
+    document.getElementById('welcome').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+  });
+
+  // Le code correction orthographique (ton code avec LanguageTool API)
+  const checkBtn = document.getElementById('checkBtn');
+  const textArea = document.getElementById('text');
+  const correctedDiv = document.getElementById('correctedText');
+  const messageDiv = document.getElementById('message');
+  const soundError = document.getElementById('sound-error');
+  const soundSuccess = document.getElementById('sound-success');
+
+  checkBtn.addEventListener('click', () => {
+    const text = textArea.value.trim();
+    correctedDiv.innerHTML = '';
+    messageDiv.innerHTML = '';
+
+    if (!text) {
+      messageDiv.textContent = 'Veuillez écrire un texte.';
+      messageDiv.className = 'message-box message-error';
+      return;
+    }
+
+    correctedDiv.textContent = 'Correction en cours...';
+
+    fetch('https://api.languagetool.org/v2/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        text: text,
+        language: 'fr',
+      }),
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.matches.length === 0) {
+          // Aucun faute
+          correctedDiv.textContent = text;
+          messageDiv.textContent = 'Bravo ! Tout est correct.';
+          messageDiv.className = 'message-box message-success';
+          soundSuccess.play();
+          return;
+        }
+
+        // On va reconstruire le texte en ajoutant un span avec class "faulty" sur chaque faute
+        let resultHTML = '';
+        let lastIndex = 0;
+
+        data.matches.sort((a,b) => a.offset - b.offset).forEach(match => {
+          const start = match.offset;
+          const end = start + match.length;
+
+          resultHTML += escapeHTML(text.slice(lastIndex, start));
+
+          const faultyWord = escapeHTML(text.slice(start, end));
+          const suggestions = match.replacements.map(r => r.value).join(', ') || 'Aucune suggestion';
+
+          resultHTML += `<span class="faulty" title="${escapeHTML(match.message)}\nSuggestions : ${escapeHTML(suggestions)}">${faultyWord}</span>`;
+
+          lastIndex = end;
+        });
+
+        resultHTML += escapeHTML(text.slice(lastIndex));
+
+        correctedDiv.innerHTML = resultHTML;
+
+        messageDiv.textContent = `Attention, ${data.matches.length} faute(s) détectée(s).`;
+        messageDiv.className = 'message-box message-error';
+        soundError.play();
+      })
+      .catch(err => {
+        correctedDiv.textContent = '';
+        messageDiv.textContent = `Erreur : ${err.message}`;
+        messageDiv.className = 'message-box message-error';
+      });
+  });
+
+  function escapeHTML(text) {
+    return text.replace(/[&<>"']/g, function(m) {
+      return ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[m];
+    });
+  }
+</script>
